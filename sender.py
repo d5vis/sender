@@ -3,8 +3,7 @@ import math
 import sys
 import numpy as np
 import mediapipe as mp
-
-# https://developers.google.com/mediapipe/solutions/vision/pose_landmarker
+from sklearn.cluster import KMeans
 
 class Sender:
     def __init__(self, file_path=None):
@@ -133,40 +132,37 @@ class Sender:
         Returns:
         - list: The holds
         """
-        # Create trackbars to adjust the HSV range
-        def nothing(x):
+        def nothing():
             pass
+
         # Create a window to display the adjusted threshold values
-        cv2.namedWindow('Threshold', cv2.WINDOW_NORMAL)
-        cv2.resizeWindow('Threshold', 300, 300)
-
+        cv2.namedWindow('Sender - Select Holds', cv2.WINDOW_NORMAL)
+        cv2.resizeWindow('Sender - Select Holds', 300, 300)
         # Create trackbars for the HSV range
-        cv2.createTrackbar('HMin', 'Threshold', 0, 179, nothing)
-        cv2.createTrackbar('HMax', 'Threshold', 0, 179, nothing)
-        cv2.createTrackbar('SMin', 'Threshold', 0, 255, nothing)
-        cv2.createTrackbar('SMax', 'Threshold', 0, 255, nothing)
-        cv2.createTrackbar('VMin', 'Threshold', 0, 255, nothing)
-        cv2.createTrackbar('VMax', 'Threshold', 0, 255, nothing)
-        cv2.putText(frame, 'Select the hold color threshold values', (50, 300), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.createTrackbar('HMin', 'Sender - Select Holds', 0, 179, nothing)
+        cv2.createTrackbar('HMax', 'Sender - Select Holds', 0, 179, nothing)
+        cv2.createTrackbar('SMin', 'Sender - Select Holds', 0, 255, nothing)
+        cv2.createTrackbar('SMax', 'Sender - Select Holds', 0, 255, nothing)
+        cv2.createTrackbar('VMin', 'Sender - Select Holds', 0, 255, nothing)
+        cv2.createTrackbar('VMax', 'Sender - Select Holds', 0, 255, nothing)
+        cv2.putText(frame, 'Select the hold color Sender - Select Holds values', (50, 300), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
         cv2.putText(frame, 'Press q to continue', (50, 350), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-
         # Set initial values for the trackbars
-        cv2.setTrackbarPos('HMin', 'Threshold', 0)
-        cv2.setTrackbarPos('HMax', 'Threshold', 10)
-        cv2.setTrackbarPos('SMin', 'Threshold', 180)
-        cv2.setTrackbarPos('SMax', 'Threshold', 255)
-        cv2.setTrackbarPos('VMin', 'Threshold', 236)
-        cv2.setTrackbarPos('VMax', 'Threshold', 255)
+        cv2.setTrackbarPos('HMin', 'Sender - Select Holds', 0)
+        cv2.setTrackbarPos('HMax', 'Sender - Select Holds', 10)
+        cv2.setTrackbarPos('SMin', 'Sender - Select Holds', 164)
+        cv2.setTrackbarPos('SMax', 'Sender - Select Holds', 255)
+        cv2.setTrackbarPos('VMin', 'Sender - Select Holds', 0)
+        cv2.setTrackbarPos('VMax', 'Sender - Select Holds', 255)
 
         while True:
             # Get current trackbar positions
-            h_min = cv2.getTrackbarPos('HMin', 'Threshold')
-            h_max = cv2.getTrackbarPos('HMax', 'Threshold')
-            s_min = cv2.getTrackbarPos('SMin', 'Threshold')
-            s_max = cv2.getTrackbarPos('SMax', 'Threshold')
-            v_min = cv2.getTrackbarPos('VMin', 'Threshold')
-            v_max = cv2.getTrackbarPos('VMax', 'Threshold')
-
+            h_min = cv2.getTrackbarPos('HMin', 'Sender - Select Holds')
+            h_max = cv2.getTrackbarPos('HMax', 'Sender - Select Holds')
+            s_min = cv2.getTrackbarPos('SMin', 'Sender - Select Holds')
+            s_max = cv2.getTrackbarPos('SMax', 'Sender - Select Holds')
+            v_min = cv2.getTrackbarPos('VMin', 'Sender - Select Holds')
+            v_max = cv2.getTrackbarPos('VMax', 'Sender - Select Holds')
             # Display the threshold values
             hsv_min = np.array([h_min, s_min, v_min])
             hsv_max = np.array([h_max, s_max, v_max])
@@ -174,26 +170,18 @@ class Sender:
             rgb_max = cv2.cvtColor(np.uint8([[hsv_max]]), cv2.COLOR_HSV2BGR)[0][0]
             cv2.circle(frame, (50, 50), 50, (int(rgb_min[0]), int(rgb_min[1]), int(rgb_min[2])), -1)
             cv2.circle(frame, (50, 150), 50, (int(rgb_max[0]), int(rgb_max[1]), int(rgb_max[2])), -1)
-            
             # Convert the image to HSV
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-            
             # Create a mask based on the current HSV range
             self.color_lower = np.array([h_min, s_min, v_min])
             self.color_upper = np.array([h_max, s_max, v_max])
             mask = cv2.inRange(hsv, self.color_lower, self.color_upper)
             output = cv2.bitwise_and(frame, frame, mask=mask)
-
-            # Draw the temp holds
-            # temp_holds = self.find_holds(frame, self.color_lower, self.color_upper)
-            # self.draw_holds(frame, temp_holds)
-            
             # Show the masked image
             # cv2.imshow('Sender - Select Holds', frame)
             cv2.imshow('Sender - Select Holds', output)
-            
             # If the user presses the 'q' key, break the loop
-            if cv2.waitKey(100) & 0xFF == ord('q'):
+            if cv2.waitKey(33) & 0xFF == ord('q'):
                 break
         cv2.destroyAllWindows()
         return self.find_holds(frame, self.color_lower, self.color_upper)
@@ -210,47 +198,27 @@ class Sender:
         """
         # Convert frame to HSV color space
         hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        
         # Create a mask based on the color range
         mask = cv2.inRange(hsv_frame, np.array(color_lower), np.array(color_upper))
-        
         # Find contours in the mask
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
         # Iterate through contours and extract positions
-        holds_positions = []
+        hold_positions = []
         for contour in contours:
             # Calculate centroid of the contour
             M = cv2.moments(contour)
             if M["m00"] != 0:
                 cx = int(M["m10"] / M["m00"])
                 cy = int(M["m01"] / M["m00"])
-                holds_positions.append((cx, cy))
-        
-        return holds_positions
-    
-    # TODO
-    # def update_moves(self, lm, holds):
-    #     """
-    #     Update the number of moves
-
-    #     Parameters:
-    #     - lm (mediapipe.solutions.pose.PoseLandmarkList): The pose landmarks
-    #     - holds (list): The holds
-    #     """
-    #     left_wrist = lm.landmark[mp.solutions.pose.PoseLandmark.LEFT_WRIST.value]
-    #     right_wrist = lm.landmark[mp.solutions.pose.PoseLandmark.RIGHT_WRIST.value]
-    #     left_ankle = lm.landmark[mp.solutions.pose.PoseLandmark.LEFT_ANKLE.value]
-    #     right_ankle = lm.landmark[mp.solutions.pose.PoseLandmark.RIGHT_ANKLE.value]
-    #     for hold in holds:
-    #         if self.distance(left_wrist.x, left_wrist.y, hold[0], hold[1]) < 300:
-    #             print('left hand on hold')
-    #         if self.distance(right_wrist.x, right_wrist.y, hold[0], hold[1]) < 300:
-    #             print('right hand on hold')
-    #         if self.distance(left_ankle.x, left_ankle.y, hold[0], hold[1]) < 300:
-    #             print('left foot on hold')
-    #         if self.distance(right_ankle.x, right_ankle.y, hold[0], hold[1]) < 300:
-    #             print('right foot on hold')
+                hold_positions.append((cx, cy))
+        # return hold_positions
+        # Perform K-means clustering
+        hold_positions_np = np.array(hold_positions)
+        kmeans = KMeans(n_clusters=15, n_init=10)
+        kmeans.fit(hold_positions_np)
+        # Get cluster centers
+        cluster_centers = kmeans.cluster_centers_.astype(int)
+        return cluster_centers.tolist()
 
     def draw_holds(self, frame, holds):
         """
@@ -281,7 +249,6 @@ class Sender:
             if lm:
                 # TODO
                 # self.update_moves(lm, self.holds)
-
                 arm_angles = self.shoulder_angles(lm)
                 cv2.putText(frame, f'Left Arm: {arm_angles[0]:.2f} degrees', (50, 50), self.font, 1, self.blue, 2, cv2.LINE_AA)
                 cv2.putText(frame, f'Right Arm: {arm_angles[1]:.2f} degrees', (50, 75), self.font, 1, self.blue, 2, cv2.LINE_AA)
